@@ -1,21 +1,67 @@
-#!/usr/bin/env node
+// - aqui estou criando as stacks 
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
-import { ECommerceAwsStack } from '../lib/e_commerce_aws-stack';
+import { ProductsAppStack } from '../lib/productsApp-stack';
+import { EcommerceApiStack } from '../lib/ecommerceApi-stack';
+import { ProductsAppLayersStack } from '../lib/productsAppLayers-stack';
+import { EventsDdbStack } from '../lib/eventsDdb-stack';
+import { OrdersAppLayersStack } from '../lib/ordersAppLayers-stack';
+import { OrdersAppStack } from '../lib/ordersApp-stack';
+
 
 const app = new cdk.App();
-new ECommerceAwsStack(app, 'ECommerceAwsStack', {
-  /* If you don't specify 'env', this stack will be environment-agnostic.
-   * Account/Region-dependent features and context lookups will not work,
-   * but a single synthesized template can be deployed anywhere. */
 
-  /* Uncomment the next line to specialize this stack for the AWS Account
-   * and Region that are implied by the current CLI configuration. */
-  // env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION },
+const env: cdk.Environment = {
+  account: "521432047319",
+  region: "us-east-1"
+}
 
-  /* Uncomment the next line if you know exactly what Account and Region you
-   * want to deploy the stack to. */
-  // env: { account: '123456789012', region: 'us-east-1' },
+const tags = {
+  cost: "ECommerce",
+  team: "DjSoulCode"
+}
 
-  /* For more information, see https://docs.aws.amazon.com/cdk/latest/guide/environments.html */
-});
+const productsAppLayersStack = new ProductsAppLayersStack(app, "ProductsAppLayers", {
+  tags: tags,
+  env: env
+})
+
+const eventsDdbStack = new EventsDdbStack(app, "EventsDdb", {
+  tags: tags,
+  env: env
+})
+
+const productsAppStack = new ProductsAppStack(app, "ProductsApp", {
+  eventsDdb: eventsDdbStack.table,
+  tags: tags,
+  env: env
+})
+productsAppStack.addDependency(productsAppLayersStack)
+productsAppStack.addDependency(eventsDdbStack)
+
+const ordersAppLayerStack = new OrdersAppLayersStack(app, "OrdersAppLayers", {
+  tags: tags,
+  env: env
+})
+
+const ordersAppStack = new OrdersAppStack(app, "OrdersApp", {
+  tags: tags,
+  env: env,
+  productsDdb: productsAppStack.productsDdb,
+  eventsDdb: eventsDdbStack.table
+})
+ordersAppStack.addDependency(productsAppStack)
+ordersAppStack.addDependency(ordersAppLayerStack)
+ordersAppStack.addDependency(eventsDdbStack)
+
+const eCommerceApiStack = new EcommerceApiStack(app, "ECommerceApi", {
+  productsFetchHandler: productsAppStack.productsFetchHandler,
+  productsAdminHandler: productsAppStack.productsAdminHandler,
+  ordersHandler: ordersAppStack.ordersHandler,
+  tags: tags,
+  env: env
+})
+eCommerceApiStack.addDependency(productsAppStack)
+eCommerceApiStack.addDependency(ordersAppStack)
+
+// aqui é para organizar as stacks

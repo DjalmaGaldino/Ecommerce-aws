@@ -1,0 +1,175 @@
+Agora com o nosso chip, a gente já foi criado lá na sua stack.
+
+Nós precisamos criar uma forma de integrá lo com a nossa função lambida.
+
+Essa vão ser as operações que nós vamos criar no nosso serviço de gerenciamento de produtos.
+
+E eu preciso, como eu disse, criar uma integração com essa primeira função que nós já criamos lá na
+
+Steck de produtos que possivelmente no futuro vai acessar uma tabela do Dynamo.
+
+Mas, por enquanto, vamos trabalhar só na EPI.
+
+A primeira operação que nós precisamos criar é essa operação aqui que nós já definimos lá na nossa função,
+
+no âmbito da operação de Get no endereço barra products.
+
+No futuro, ela vai ser utilizada para listar todos os produtos, acessar aquela tabela do Dynamo.
+
+Ele está todos os produtos.
+
+Então, agora eu preciso criar uma cola, uma integração entre o IP h3 e aquela função, definindo que
+
+quando alguém fizer uma requisição GET nesse endereço barra products e ela seja redirecionada para aquela
+
+função.
+
+Então de volta para o estúdio.
+
+Eu preciso saber qual que é a função lambda que eu tenho que criar aquela integração.
+
+Lembre se que aqui na nossa Steck, que nós criamos a nossa função de produtos, nós colocamos um atributo
+
+de classe que representa aquela função.
+
+Eu posso passar esse atributo aqui para dentro da minha classe.
+
+Eu poderia fazer da seguinte forma eu poderia pegar que esse atributo aqui eu poderia passar no construtor
+
+aqui da minha.
+
+A classe da minha Steck poderia fazer dessa forma.
+
+Porém, já fica claro que quanto mais parâmetros eu colocar aqui, vai ficar um pouco ruim a chamada,
+
+a criação dessa Steck, porque vou ter muitos parâmetros no construtor, então uma forma mais inteligente
+
+de se fazer isso e criando aqui uma interface.
+
+Eu vou chamar de se.
+
+IPI Step Drops, extendendo exatamente desse parâmetro desse tipo que é o sidecar.
+
+Steck propôs.
+
+Então eu vou colocar alguns atributos aqui dentro e fazer com que essa minha propriedade aqui, primeiramente
+
+deixe de ser opcional e passe a ser obrigatória.
+
+Mas agora, ao invés de ela ser do tipo ser da casta que propôs, eu vou dizer que ela vai ter que ser
+
+e-commerce e IPI stec, propôs.
+
+Ou seja, as propriedades da minha classe e da definição aqui da minha Steck vão estar definidas aqui,
+
+dentro dessa interface que já vai conter todas as outras propriedades que já existiam dentro de você.
+
+Steck propôs E aqui dentro eu posso definir os atributos que eu quero.
+
+São os meus atributos para definição dessa classe.
+
+Eu vou chamar aqui, então aqui de products fetch handler do tipo lambda nor gs.
+
+Ponto no gs function.
+
+Ok.
+
+Então, quando eu criar essa classe aqui, eu vou passar uma propriedade desse tipo aqui para que ela
+
+tenha acesso à função de produtos aqui dentro.
+
+E agora que eu tenho acesso a função de produtos dentro da Steck, que cria o meu IP gato?
+
+Eu posso então começar a fazer a integração do meu IP HT com a minha função lambda e a biblioteca API
+
+Gateway possui exatamente isso que a gente precisa a criação de um lambda integration.
+
+Então eu vou criar uma constante chamada products fetch integration.
+
+New Hippie, a gata lambida integration.
+
+E aqui eu vou passar justamente para quero criar uma integração de um IP e gateway, uma integração
+
+com lambda.
+
+Para qual função?
+
+E aí eu posso acessar a minha e o atributo laptops, que é esse atributo que a gente está recebendo
+
+no construtor.
+
+Ponto.
+
+Falta de sete a Handler que eu estou referenciando justamente a esse atributo que eu coloquei aqui na
+
+minha interface, ok?
+
+E aí, então eu criei a minha integração para representar.
+
+Como que o meu iPad vai chegar naquela função?
+
+Vai invocar aquela função?
+
+Mas eu ainda preciso dizer de que forma que aquela função vai ser evocada e aí eu preciso criar duas
+
+coisas.
+
+Primeiro, eu preciso criar um recurso que representa o meu serviço de produtos.
+
+Então, no iPad Later, eu vou criar aqui um Products Resource.
+
+Agora, dentro do meu Ypy Ágatha, o meu iPad, jeito que eu criei aqui está o próprio viajei de 4 a
+
+6 tec toy e estou adicionando aqui um novo recurso na raiz, porque raiz Prep a gente já fornece para
+
+a gente.
+
+Um recurso.
+
+Que é o Barra, mas aqui agora esse barra é representado por foot raiz.
+
+Mas agora eu quero criar aqui o Barra Products.
+
+Então, o que eu faço dentro do Raiz?
+
+Eu crio mais um recurso.
+
+E aí eu dou nome para ele de Products.
+
+Então veja que aqui não tem barra.
+
+O Barra já existe dentro de Road, onde eu estou criando esse recurso?
+
+Ok, então, essa primeira coisa que eu preciso fazer eu criei aqui.
+
+Então agora o meu recurso Products OK, dentro do meu recurso products.
+
+Eu posso, então, criar um método, adicionar aqui um método onde eu falo para Reebok.
+
+Qual verbo http que eu quero invocar esse método get.
+
+Para onde que eu quero redirecionar essa minha requisição?
+
+Que chegar no endereço barra products com o verbo get.
+
+Eu quero redirecionar para a minha integração produtos fast integration, que por sua vez redireciona
+
+para minha função.
+
+Então, o que está acontecendo aqui?
+
+Se eu receber uma requisição em português com o verbo get, eu vou redirecionar para minha integração,
+
+que por sua vez vai invocar a minha função de volta lá para nossa função, onde essa função foi criada
+
+a Step de Produtos.
+
+Ela vai invocar o método Handler dentro desse arquivo product fast function ponto TS, que por sua vez,
+
+lá dentro tem uma verificação se o evento que chegou foi o Barra Protect, que é o que foi definido
+
+com verbo get, que também é o que foi definido lá dentro.
+
+Nós vamos aprender um pouco mais pra frente que isso não seria necessário, mas por enquanto vamos deixar
+
+ele aí para poder implementar e fazer os primeiros testes.
