@@ -3,7 +3,10 @@ import * as lambdaNodeJS from "aws-cdk-lib/aws-lambda-nodejs";
 import * as cdk from "aws-cdk-lib";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as ssm from "aws-cdk-lib/aws-ssm";
+import * as sqs from "aws-cdk-lib/aws-sqs";
 import { Construct } from "constructs";
+import * as iam from "aws-cdk-lib/aws-iam";
+import { SqsDestination } from "aws-cdk-lib/aws-lambda-destinations";
 
 
 interface ProductsAppStackProps extends cdk.StackProps {
@@ -41,6 +44,10 @@ export class ProductsAppStack extends cdk.Stack {
     const productEventsLayer = lambda.LayerVersion.fromLayerVersionArn(this, "ProductEventsLayerVersionArn", productEventsLayerArn)
 
     // função lambda 1: função para evento de produtos
+    const dlq = new sqs.Queue(this, "ProductEventsDlq", {
+      queueName: "product-events-dlq",
+      retentionPeriod: cdk.Duration.days(10)
+    })
     const productEventsHandler = new lambdaNodeJS.NodejsFunction(this, "ProductsEventsFunction", {
       functionName: "ProductsEventsFunction",
       entry: "lambda/products/productEventsFunction.ts",
@@ -56,9 +63,23 @@ export class ProductsAppStack extends cdk.Stack {
       },
       layers: [productEventsLayer],
       tracing: lambda.Tracing.ACTIVE, // habilitando o rastreamento
+      deadLetterQueueEnabled: true,
+      deadLetterQueue: dlq,
       insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0
     })
-    props.eventsDdb.grantWriteData(productEventsHandler)
+    // props.eventsDdb.grantWriteData(productEventsHandler)
+
+    const eventsDdbPolicy = new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["dynamodb:PutItem"],
+      resources: [props.eventsDdb.tableArn],
+      conditions: {
+        ['ForAllValues:StringLike']: {
+          'dynamodb:LeadingKeys': ['#product_*']
+        }
+      }
+    })
+    productEventsHandler.addToRolePolicy(eventsDdbPolicy)
 
     // função lambda 2: Funçã de produto
     this.productsFetchHandler = new lambdaNodeJS.NodejsFunction(this, "ProductsFetchFunction", {

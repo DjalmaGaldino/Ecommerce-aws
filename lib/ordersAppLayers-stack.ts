@@ -47,7 +47,7 @@ export class OrdersAppLayersStack extends cdk.Stack {
     const orderEventsRepositoryLayer = new lambda.LayerVersion(this, 'OrderEventsRepositoryLayer', {
       code: lambda.Code.fromAsset('lambda/orders/layers/orderEventsRepositoryLayer'),
       compatibleRuntimes: [lambda.Runtime.NODEJS_14_X],
-      layerVersionName: 'OrderEventsLayer',
+      layerVersionName: 'OrderEventsRepositoryLayer',
       removalPolicy: cdk.RemovalPolicy.RETAIN
     })
 
