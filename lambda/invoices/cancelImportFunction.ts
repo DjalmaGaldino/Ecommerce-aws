@@ -1,11 +1,55 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from "aws-lambda"
+import { ApiGatewayManagementApi, DynamoDB } from "aws-sdk"
 import * as AWSXRay from "aws-xray-sdk"
+import { EventEmitter } from "stream"
+import { InvoiceTransactionRepository, InvoiceTransactionStatus } from "/opt/nodejs/invoiceTransaction"
+import { InvoiceWSService } from "/opt/nodejs/invoiceWSConnection"
 
 AWSXRay.captureAWS(require('aws-sdk'))
 
+const invoiceDdb = process.env.INVOICE_DDB!
+const invoicesWSApiEndpoint = process.env.INVOICE_WSAPI_ENDPOINT!.substring(6)
+
+const ddbClient = new DynamoDB.DocumentClient()
+const apigwManagementApi = new ApiGatewayManagementApi({
+  endpoint: invoicesWSApiEndpoint
+})
+
+const invoiceTransactionRepository = new InvoiceTransactionRepository(ddbClient, invoiceDdb)
+const invoiceWSService = new InvoiceWSService(apigwManagementApi)
+
 export async function handler(event: APIGatewayProxyEvent, context: Context): Promise<APIGatewayProxyResult> {
 
-  console.log(event)
+  const transactionId = JSON.parse(event.body!).transactionId as string
+  const lambdaRequestId = context.awsRequestId
+  const connectionId = event.requestContext.connectionId!
+
+  console.log(`ConnectionId: ${connectionId} - Lambda RequestId: ${lambdaRequestId}`)
+
+  try {
+    const invoiceTransaction = await invoiceTransactionRepository.getInvoiceTransaction(transactionId)
+
+    if(invoiceTransaction.transactionStatus === InvoiceTransactionStatus.GENERATED) {
+
+      await Promise.all([ invoiceWSService.sendInvoiceStatus(transactionId, connectionId, InvoiceTransactionStatus.CANCELED),
+
+      invoiceTransactionRepository.updateInvoiceTransaction(transactionId, InvoiceTransactionStatus.CANCELED)
+      ])
+
+    } else {
+      await invoiceWSService.sendInvoiceStatus(transactionId, connectionId, invoiceTransaction.transactionStatus)
+
+      console.error(`Can't cancel an ongoing process`)
+    }
+
+  } catch(error) {
+    console.error((<Error>error).message)
+    console.error(`Invoice not found - TransactionId: ${transactionId}`)
+
+    await invoiceWSService.sendInvoiceStatus(transactionId, connectionId, InvoiceTransactionStatus.NOT_FOUND)
+  }
+
+  await invoiceWSService.disconnectClient(connectionId)
 
   return {
     statusCode: 200,

@@ -4,9 +4,10 @@ import * as lambdaNodeJS from "aws-cdk-lib/aws-lambda-nodejs";
 import * as cdk from "aws-cdk-lib";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
 import * as cwlogs from "aws-cdk-lib/aws-logs";
+import * as cognito from "aws-cdk-lib/aws-cognito"
+import * as lambda from "aws-cdk-lib/aws-lambda"
+import * as iam from "aws-cdk-lib/aws-iam"
 import { Construct } from "constructs";
-import { ApiGatewayManagementApi } from "aws-sdk";
-
 
 interface EcommerceApiStackProps extends cdk.StackProps {
   productsFetchHandler: lambdaNodeJS.NodejsFunction
@@ -16,6 +17,11 @@ interface EcommerceApiStackProps extends cdk.StackProps {
 }
 
 export class EcommerceApiStack extends cdk.Stack {
+  private productsAuthorizer: apigateway.CognitoUserPoolsAuthorizer
+  private productsAdminAuthorizer: apigateway.CognitoUserPoolsAuthorizer
+  private ordersAuthorizer: apigateway.CognitoUserPoolsAuthorizer
+  private customerPool: cognito.UserPool
+  private adminPool: cognito.UserPool
 
   constructor(scope: Construct, id: string, props: EcommerceApiStackProps) {
     super(scope, id, props)
@@ -42,11 +48,223 @@ export class EcommerceApiStack extends cdk.Stack {
       }
     })
 
-    // --- gerado logs.
+    this.createCognitoAuth()
+
+    const adminUserPolicyStatement = new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["cognito-idp:AdminGetUser"],
+      resources: [this.adminPool.userPoolArn] 
+    })
+    const adminUserPolicy = new iam.Policy(this, "AdminGetUserPolicy", {
+      statements: [adminUserPolicyStatement]
+    })
+    adminUserPolicy.attachToRole(<iam.Role> props.productsAdminHandler.role)
+    adminUserPolicy.attachToRole(<iam.Role> props.ordersHandler.role)
+
+    const customerUserPolicyStatement = new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["cognito-idp:AdminGetUser"],
+      resources: [this.customerPool.userPoolArn] 
+    })
+    const customerUserPolicy = new iam.Policy(this, "CustomerGetUserPolicy", {
+      statements: [customerUserPolicyStatement]
+    })
+    customerUserPolicy.attachToRole(<iam.Role> props.ordersHandler.role)
 
     // criando um lambda integration
     this.createProductsService(props, api);
     this.createOrdersService(props, api)
+  }
+// ----------- cognito -------------
+  private createCognitoAuth() {
+    const postConfirmationHandler = new lambdaNodeJS.NodejsFunction(this, "PostConfirmationFunction", {
+      functionName: "PostConfirmationFunction",
+      entry: "lambda/auth/postConfirmationFunction.ts",
+      handler: "handler",
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(2),
+      bundling: {
+        minify: true,
+        sourceMap: false
+      },
+      tracing: lambda.Tracing.ACTIVE, // habilitando o rastreamento
+      insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0
+    })
+
+    const preAuthenticationHandler = new lambdaNodeJS.NodejsFunction(this, "PreAuthenticationFunction", {
+      functionName: "PreAuthenticationFunction",
+      entry: "lambda/auth/preAuthenticationFunction.ts",
+      handler: "handler",
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(2),
+      bundling: {
+        minify: true,
+        sourceMap: false
+      },
+      tracing: lambda.Tracing.ACTIVE, // habilitando o rastreamento
+      insightsVersion: lambda.LambdaInsightsVersion.VERSION_1_0_119_0
+    })
+
+    //criando userpool customer
+    this.customerPool = new cognito.UserPool(this, "CustomerPool", {
+      lambdaTriggers: {
+        preAuthentication: preAuthenticationHandler,
+        postConfirmation: postConfirmationHandler
+      },
+      userPoolName: "CustomerPool",
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      selfSignUpEnabled: true,
+      autoVerify: {
+        email: true,
+        phone: false
+      },
+      userVerification: {
+        emailSubject: "Verify your email for the ECommerce service!",
+        emailBody: "Thanks for signing up to Ecommerce service! Your verification code is {####}",
+        emailStyle: cognito.VerificationEmailStyle.CODE
+      },
+      signInAliases: {
+        username: false,
+        email: true
+      },
+      standardAttributes: {
+        fullname: {
+          required: true,
+          mutable: false
+        }
+      },
+      passwordPolicy: {
+        minLength: 8,
+        requireLowercase: true,
+        requireUppercase: true,
+        requireDigits: true,
+        requireSymbols: true,
+        tempPasswordValidity: cdk.Duration.days(3)
+      },
+      accountRecovery: cognito.AccountRecovery.EMAIL_ONLY
+    })
+
+    //Cognito admin userPool
+    this.adminPool = new cognito.UserPool(this, "AdminPool", {
+      userPoolName: "AdminPool",
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      selfSignUpEnabled: false,
+      userInvitation: {
+        emailSubject: "Welcome to ECommerce administrator service",
+        emailBody: 'Your username is {username} and temporary password is {####}'
+      },
+      signInAliases: {
+        username: false,
+        email: true
+      },
+      standardAttributes: {
+        email: {
+          required: true,
+          mutable: false
+        }
+      },
+      passwordPolicy: {
+        minLength: 8,
+        requireLowercase: true,
+        requireUppercase: true,
+        requireDigits: true,
+        requireSymbols: true,
+        tempPasswordValidity: cdk.Duration.days(3)
+      },
+      accountRecovery: cognito.AccountRecovery.EMAIL_ONLY
+    })
+
+    this.customerPool.addDomain("CustomerDomain", {
+      cognitoDomain: {
+        domainPrefix: "dj-customer-service"
+      }
+    })
+
+    this.adminPool.addDomain("AdminDomain", {
+      cognitoDomain: {
+        domainPrefix: "dj-admin-service"
+      }
+    })
+
+    const customerWebScope = new cognito.ResourceServerScope({
+      scopeName: "web",
+      scopeDescription: "Customer web operation"
+    })
+
+    const customerMobileScope = new cognito.ResourceServerScope({
+      scopeName: "mobile",
+      scopeDescription: "Customer mobile operation"
+    })
+
+    const adminWebScope = new cognito.ResourceServerScope({
+      scopeName: "web",
+      scopeDescription: "Admin web operation"
+    })
+
+    const customerResourceServer = this.customerPool.addResourceServer("CustomerResourceServer", {
+      identifier: "customer",
+      userPoolResourceServerName: "CustomerResourceServer",
+      scopes: [customerWebScope, customerMobileScope]
+    })
+
+    const adminResourceServer = this.adminPool.addResourceServer("AdminResourceServer", {
+      identifier: "admin",
+      userPoolResourceServerName: "AdminResourceServer",
+      scopes: [adminWebScope]
+    })
+
+    this.customerPool.addClient("customer-web-client", {
+      userPoolClientName: "customerWebClient",
+      authFlows: {
+        userPassword: true
+      },
+      accessTokenValidity: cdk.Duration.minutes(60),
+      refreshTokenValidity: cdk.Duration.days(7),
+      oAuth: {
+        scopes: [cognito.OAuthScope.resourceServer(customerResourceServer, customerWebScope)]
+      }
+    })
+
+    this.adminPool.addClient("admin-web-client", {
+      userPoolClientName: "adminWebClient",
+      authFlows: {
+        userPassword: true
+      },
+      accessTokenValidity: cdk.Duration.minutes(60),
+      refreshTokenValidity: cdk.Duration.days(7),
+      oAuth: {
+        scopes: [cognito.OAuthScope.resourceServer(adminResourceServer, adminWebScope)]
+      }
+    })
+
+    this.customerPool.addClient("customer-mobile-client", {
+      userPoolClientName: "customerMobileClient",
+      authFlows: {
+        userPassword: true
+      },
+      accessTokenValidity: cdk.Duration.minutes(60),
+      refreshTokenValidity: cdk.Duration.days(7),
+      oAuth: {
+        scopes: [cognito.OAuthScope.resourceServer(customerResourceServer, customerMobileScope)]
+      }
+    })
+
+      // -autorizador
+    this.productsAuthorizer = new apigateway.CognitoUserPoolsAuthorizer(this, "ProductsAuthorizer", {
+      authorizerName: "ProductsAuthorizer",
+      cognitoUserPools: [this.customerPool, this.adminPool]
+    })
+
+      // -autorizador admin
+    this.productsAdminAuthorizer = new apigateway.CognitoUserPoolsAuthorizer(this, "ProductsAdminAuthorizer", {
+      authorizerName: "ProductsAdminAuthorizer",
+      cognitoUserPools: [this.adminPool]
+    })
+
+    this.ordersAuthorizer = new apigateway.CognitoUserPoolsAuthorizer(this, "OrdersAuthorizer", {
+      authorizerName: "OrdersAuthorizer",
+      cognitoUserPools: [this.customerPool, this.adminPool]
+    })
   }
 
   private createOrdersService(props: EcommerceApiStackProps, api: apigateway.RestApi) {
@@ -58,20 +276,29 @@ export class EcommerceApiStack extends cdk.Stack {
     //GET /orders
     //GET /orders?email=fulano@cicrano.com.br
     //GET /orders?email=fulano@cicrano.com.br&orderId=123
-    ordersResource.addMethod("GET", ordersIntegration)
+    ordersResource.addMethod("GET", ordersIntegration, {
+      authorizer: this.ordersAuthorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizationScopes: ["customer/web", "customer/mobile", "admin/web"]
+      
+    })
     
     const orderDeletionValidator = new apigateway.RequestValidator(this, "OrderDeletionValidator", {
       restApi: api,
       requestValidatorName: "OrderDeletionValidator",
       validateRequestParameters: true,
     })
+
     //DELETE /orders?email=fulano@cicrano.com.br&orderId=123
     ordersResource.addMethod("DELETE", ordersIntegration, {
       requestParameters: {
         'method.request.querystring.email': true,
         'method.request.querystring.orderId': true
       },
-      requestValidator: orderDeletionValidator
+      requestValidator: orderDeletionValidator,
+      authorizer: this.ordersAuthorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizationScopes: ["customer/web", "admin/web"]
     })
 
     //POST /orders
@@ -88,9 +315,6 @@ export class EcommerceApiStack extends cdk.Stack {
       schema: {
         type: apigateway.JsonSchemaType.OBJECT,
         properties: {
-          email: {
-            type: apigateway.JsonSchemaType.STRING
-          },
           productIds: {
             type: apigateway.JsonSchemaType.ARRAY,
             minItems: 1,
@@ -104,7 +328,6 @@ export class EcommerceApiStack extends cdk.Stack {
           }
         },
         required: [
-          "email",
           "productIds",
           "payment"
         ]
@@ -114,7 +337,10 @@ export class EcommerceApiStack extends cdk.Stack {
       requestValidator: orderRequestValidator,
       requestModels: {
         "application/json": orderModel
-      }
+      },
+      authorizer: this.ordersAuthorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizationScopes: ["customer/web", "admin/web"]
     })
 
     // /orders/events
@@ -143,14 +369,26 @@ export class EcommerceApiStack extends cdk.Stack {
   private createProductsService(props: EcommerceApiStackProps, api: apigateway.RestApi) {
     const productsFetchIntegration = new apigateway.LambdaIntegration(props.productsFetchHandler);
 
+    const productsFetchWebMobileIntegrationOption = {
+      authorizer: this.productsAuthorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizationScopes: ['customer/web', 'customer/mobile', 'admin/web']
+    }
+
+    const productsFetchWebIntegrationOption = {
+      authorizer: this.productsAuthorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizationScopes: ['customer/web', 'admin/web']
+    }
+
     // criando o recurso -> "/products"
     const productsResource = api.root.addResource("products");
     // adicionando o metodo http que quero: get
-    productsResource.addMethod("GET", productsFetchIntegration);
+    productsResource.addMethod("GET", productsFetchIntegration, productsFetchWebMobileIntegrationOption);
 
     // - GET /products/{id}
     const productIdResource = productsResource.addResource("{id}");
-    productIdResource.addMethod("GET", productsFetchIntegration);
+    productIdResource.addMethod("GET", productsFetchIntegration, productsFetchWebIntegrationOption);
 
     const productsAdminIntegration = new apigateway.LambdaIntegration(props.productsAdminHandler);
 
@@ -194,7 +432,10 @@ export class EcommerceApiStack extends cdk.Stack {
       requestValidator: productRequestValidator,
       requestModels: {
         "application/json": productModel
-      }
+      },
+      authorizer: this.productsAdminAuthorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizationScopes: ['admin/web']
     });
 
     // PUT /products/{id}
@@ -202,10 +443,17 @@ export class EcommerceApiStack extends cdk.Stack {
       requestValidator: productRequestValidator,
       requestModels: {
         "application/json": productModel
-      }
+      },
+      authorizer: this.productsAdminAuthorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizationScopes: ['admin/web']
     });
 
     // DELETE /products/{id}
-    productIdResource.addMethod("DELETE", productsAdminIntegration);
+    productIdResource.addMethod("DELETE", productsAdminIntegration, {
+      authorizer: this.productsAdminAuthorizer,
+      authorizationType: apigateway.AuthorizationType.COGNITO,
+      authorizationScopes: ['admin/web']
+    })
   }
 }

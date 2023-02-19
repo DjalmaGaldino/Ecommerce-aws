@@ -1,5 +1,5 @@
 // - aqui estou criando as stacks 
-import 'source-map-support/register';
+// import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { ProductsAppStack } from '../lib/productsApp-stack';
 import { EcommerceApiStack } from '../lib/ecommerceApi-stack';
@@ -7,8 +7,10 @@ import { ProductsAppLayersStack } from '../lib/productsAppLayers-stack';
 import { EventsDdbStack } from '../lib/eventsDdb-stack';
 import { OrdersAppLayersStack } from '../lib/ordersAppLayers-stack';
 import { OrdersAppStack } from '../lib/ordersApp-stack';
-import { InvoiceWSApiStack } from 'lib/invoiceWSApi-stack';
-import { InvoicesAppLayersStack } from 'lib/invoicesAppLayers-stack';
+import { InvoiceWSApiStack } from '../lib/invoiceWSApi-stack'
+import { InvoicesAppLayersStack } from '../lib/invoicesAppLayers-stack';
+import { AuditEventBusStack } from '../lib/auditEventBus-stack';
+import { AuthLayersStack } from '../lib/authLayers-stack';
 
 
 const app = new cdk.App();
@@ -22,6 +24,22 @@ const tags = {
   cost: "ECommerce",
   team: "DjSoulCode"
 }
+
+const auditEventBus = new AuditEventBusStack(app, "AuditEvents", {
+  tags: {
+    cost: 'Audit',
+    team: 'DjSoulcode'
+  },
+  env: env
+})
+
+const authLayersStack = new AuthLayersStack(app, "authLayers", {
+  tags: {
+    cost: 'Audit',
+    team: 'DjSoulcode'
+  },
+  env: env
+})
 
 const productsAppLayersStack = new ProductsAppLayersStack(app, "ProductsAppLayers", {
   tags: tags,
@@ -39,6 +57,7 @@ const productsAppStack = new ProductsAppStack(app, "ProductsApp", {
   env: env
 })
 productsAppStack.addDependency(productsAppLayersStack)
+productsAppStack.addDependency(authLayersStack)
 productsAppStack.addDependency(eventsDdbStack)
 
 const ordersAppLayerStack = new OrdersAppLayersStack(app, "OrdersAppLayers", {
@@ -50,11 +69,13 @@ const ordersAppStack = new OrdersAppStack(app, "OrdersApp", {
   tags: tags,
   env: env,
   productsDdb: productsAppStack.productsDdb,
-  eventsDdb: eventsDdbStack.table
+  eventsDdb: eventsDdbStack.table,
+  auditBus: auditEventBus.bus
 })
 ordersAppStack.addDependency(productsAppStack)
 ordersAppStack.addDependency(ordersAppLayerStack)
 ordersAppStack.addDependency(eventsDdbStack)
+ordersAppStack.addDependency(auditEventBus)
 
 const eCommerceApiStack = new EcommerceApiStack(app, "ECommerceApi", {
   productsFetchHandler: productsAppStack.productsFetchHandler,
@@ -76,6 +97,8 @@ const invoicesAppLayersStack = new InvoicesAppLayersStack(app, "InvoicesAppLayer
 })
 
 const invoiceWSApiStack = new InvoiceWSApiStack(app, "InvoiceApi", {
+  eventsDdb: eventsDdbStack.table,
+  auditBus: auditEventBus.bus,
   tags: {
     cost: "InvoiceApp",
     team: "DjSoulCode"
@@ -83,5 +106,7 @@ const invoiceWSApiStack = new InvoiceWSApiStack(app, "InvoiceApi", {
   env: env
 })
 invoiceWSApiStack.addDependency(invoicesAppLayersStack)
+invoiceWSApiStack.addDependency(eventsDdbStack)
+invoiceWSApiStack.addDependency(auditEventBus)
 
 // aqui é para organizar as stacks

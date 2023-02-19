@@ -1,8 +1,25 @@
-# Welcome to your CDK TypeScript project
+# Welcome to my AWS CDK with TypeScript and Nodejs project
 
-This is a blank project for CDK development with TypeScript.
+In this project I builded during the course about AWS services with Nodej and Typescript an ECommerce with AWS CDK to learn how to use services in AWS.
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+## Services studied and used during the course
+
+ - AWS Lambda
+ - AWS Cloud Development Kit
+ - REST API com o AWS API Gateway
+ - AWS Lambda Layers
+ - AWS SNS
+ - AWS SQS
+ - AWS DynamoDB
+ - AWS S3
+ - WebSocket API com o AWS API Gateway
+ - DynamoDB Stream
+ - AWS SES
+ - AWS EventBridge
+ - AWS IAM
+ - AWS X-Ray
+ - AWS CloudWatch Alarms
+ - AWS Cost Explorer:
 
 ## Useful commands
 
